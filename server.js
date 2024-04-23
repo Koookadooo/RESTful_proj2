@@ -1,10 +1,16 @@
 const express = require('express');
 const morgan = require('morgan');
+const mongoose = require('mongoose');  // Require mongoose here
 
 const api = require('./api');
 
 const app = express();
 const port = process.env.PORT || 8000;
+
+// MongoDB connection setup
+const mongoDBUrl = process.env.MONGODB_URL || 'mongodb://root:password@db:27017/mydatabase?authSource=admin';
+mongoose.connect(mongoDBUrl, { useNewUrlParser: true, useUnifiedTopology: true });
+mongoose.connection.on('error', console.error.bind(console, 'MongoDB connection error:'));
 
 /*
  * Morgan is a popular logger.

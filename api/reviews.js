@@ -1,123 +1,100 @@
 const router = require('express').Router();
-const { validateAgainstSchema, extractValidFields } = require('../lib/validation');
-
-const reviews = require('../data/reviews');
-
-exports.router = router;
-exports.reviews = reviews;
-
-/*
- * Schema describing required/optional fields of a review object.
- */
-const reviewSchema = {
-  userid: { required: true },
-  businessid: { required: true },
-  dollars: { required: true },
-  stars: { required: true },
-  review: { required: false }
-};
-
+const Review = require('../models/reviews.js'); // Require the Mongoose model for reviews
+const Business = require('../models/businesses.js'); // Assume Business model is required to check business existence
 
 /*
  * Route to create a new review.
  */
-router.post('/', function (req, res, next) {
-  if (validateAgainstSchema(req.body, reviewSchema)) {
-
-    const review = extractValidFields(req.body, reviewSchema);
-
-    /*
-     * Make sure the user is not trying to review the same business twice.
-     */
-    const userReviewedThisBusinessAlready = reviews.some(
-      existingReview => existingReview
-        && existingReview.ownerid === review.ownerid
-        && existingReview.businessid === review.businessid
-    );
-
-    if (userReviewedThisBusinessAlready) {
-      res.status(403).json({
-        error: "User has already posted a review of this business"
-      });
-    } else {
-      review.id = reviews.length;
-      reviews.push(review);
-      res.status(201).json({
-        id: review.id,
-        links: {
-          review: `/reviews/${review.id}`,
-          business: `/businesses/${review.businessid}`
-        }
-      });
+router.post('/', async (req, res) => {
+  try {
+    // Check if the business exists
+    const businessExists = await Business.findById(req.body.businessid);
+    if (!businessExists) {
+      return res.status(404).json({ error: "Business not found" });
     }
 
-  } else {
-    res.status(400).json({
-      error: "Request body is not a valid review object"
+    // Check if the user has already reviewed this business
+    const existingReview = await Review.findOne({ userid: req.body.userid, businessid: req.body.businessid });
+    if (existingReview) {
+      return res.status(403).json({ error: "User has already posted a review of this business" });
+    }
+
+    const newReview = new Review(req.body);
+    await newReview.save();
+    res.status(201).json({
+      id: newReview._id,
+      links: {
+        review: `/reviews/${newReview._id}`,
+        business: `/businesses/${newReview.businessid}`
+      }
     });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
   }
 });
 
 /*
  * Route to fetch info about a specific review.
  */
-router.get('/:reviewID', function (req, res, next) {
-  const reviewID = parseInt(req.params.reviewID);
-  if (reviews[reviewID]) {
-    res.status(200).json(reviews[reviewID]);
-  } else {
-    next();
+router.get('/:reviewID', async (req, res) => {
+  try {
+    const review = await Review.findById(req.params.reviewID);
+    if (!review) {
+      return res.status(404).json({ error: "Review not found" });
+    }
+    res.status(200).json(review);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
 /*
  * Route to update a review.
  */
-router.put('/:reviewID', function (req, res, next) {
-  const reviewID = parseInt(req.params.reviewID);
-  if (reviews[reviewID]) {
-
-    if (validateAgainstSchema(req.body, reviewSchema)) {
-      /*
-       * Make sure the updated review has the same businessid and userid as
-       * the existing review.
-       */
-      let updatedReview = extractValidFields(req.body, reviewSchema);
-      let existingReview = reviews[reviewID];
-      if (updatedReview.businessid === existingReview.businessid && updatedReview.userid === existingReview.userid) {
-        reviews[reviewID] = updatedReview;
-        reviews[reviewID].id = reviewID;
-        res.status(200).json({
-          links: {
-            review: `/reviews/${reviewID}`,
-            business: `/businesses/${updatedReview.businessid}`
-          }
-        });
-      } else {
-        res.status(403).json({
-          error: "Updated review cannot modify businessid or userid"
-        });
-      }
-    } else {
-      res.status(400).json({
-        error: "Request body is not a valid review object"
-      });
+router.put('/:reviewID', async (req, res) => {
+  try {
+    const review = await Review.findById(req.params.reviewID);
+    if (!review) {
+      return res.status(404).json({ error: "Review not found" });
     }
 
-  } else {
-    next();
+    // Ensure the user and business ID match the original (they cannot change these with an update)
+    if (req.body.businessid && req.body.businessid !== review.businessid.toString()) {
+      return res.status(403).json({ error: "Cannot change the business associated with this review" });
+    }
+    if (req.body.userid && req.body.userid !== review.userid) {
+      return res.status(403).json({ error: "Cannot change the user ID associated with this review" });
+    }
+
+    review.stars = req.body.stars || review.stars;
+    review.dollars = req.body.dollars || review.dollars;
+    review.review = req.body.review || review.review;
+    await review.save();
+
+    res.status(200).json({
+      links: {
+        review: `/reviews/${review._id}`,
+        business: `/businesses/${review.businessid}`
+      }
+    });
+  } catch (error) {
+    res.status(400).json({ error: "Failed to update the review" });
   }
 });
 
 /*
  * Route to delete a review.
  */
-router.delete('/:reviewID', function (req, res, next) {
-  const reviewID = parseInt(req.params.reviewID);
-  if (reviews[reviewID]) {
-    reviews[reviewID] = null;
+router.delete('/:reviewID', async (req, res) => {
+  try {
+    const result = await Review.findByIdAndDelete(req.params.reviewID);
+    if (!result) {
+      return res.status(404).json({ error: "Review not found" });
+    }
     res.status(204).end();
-  } else {
-    next();
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
+
+module.exports = router;
