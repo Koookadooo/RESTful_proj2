@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const BusinessSchema = new mongoose.Schema({
+  id: { type: Number, required: true, unique: true },
   ownerid: { type: Number, required: true },
   name: { type: String, required: true },
   address: { type: String, required: true },

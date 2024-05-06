@@ -8,6 +8,7 @@ services:
       MONGODB_URL: mongodb://root:password@db:27017/mydatabase?authSource=admin
     depends_on:
       - db
+    restart: on-failure
     volumes:
       - ./:/usr/src/app
     networks:

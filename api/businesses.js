@@ -43,15 +43,33 @@ router.get('/', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
-    const newBusiness = new Business(req.body);
+    const existingBusiness = await Business.findOne({
+      name: req.body.name,
+      address: req.body.address
+    });
+
+    if (existingBusiness) {
+      console.log('Business already exists:', existingBusiness);
+      return res.status(409).json({ error: "Business already exists with this name and address" });
+    }
+
+    const lastBusiness = await Business.findOne().sort({ id: -1 });
+    const newId = lastBusiness ? lastBusiness.id + 1 : 1;
+
+    const newBusiness = new Business({
+      ...req.body,
+      id: newId
+    });
+
     const result = await newBusiness.save();
     res.status(201).json({
-      id: result._id,
+      id: result.id,
       links: {
-        business: `/businesses/${result._id}`
+        business: `/businesses/${result.id}`
       }
     });
   } catch (error) {
+    console.error('Failed to save new business:', error);
     res.status(400).json({ error: error.message });
   }
 });
@@ -59,9 +77,9 @@ router.post('/', async (req, res) => {
 /*
  * Route to fetch info about a specific business.
  */
-router.get('/:businessid', async (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
-    const business = await Business.findById(req.params.businessid);
+    const business = await Business.findOne({ id: parseInt(req.params.id) }); // Use findOne with numeric id
     if (!business) {
       res.status(404).json({ error: "Business not found" });
     } else {
@@ -75,15 +93,16 @@ router.get('/:businessid', async (req, res) => {
 /*
  * Route to update data for a business.
  */
-router.put('/:businessid', async (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
-    const business = await Business.findByIdAndUpdate(req.params.businessid, req.body, { new: true });
+    const business = await Business.findOneAndUpdate({ id: parseInt(req.params.id) }, req.body, { new: true });
     if (!business) {
       res.status(404).json({ error: "Business not found" });
     } else {
       res.status(200).json({
+        id: business.id,
         links: {
-          business: `/businesses/${business._id}`
+          business: `/businesses/${business.id}`
         }
       });
     }
@@ -95,9 +114,9 @@ router.put('/:businessid', async (req, res) => {
 /*
  * Route to delete a business.
  */
-router.delete('/:businessid', async (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
-    const result = await Business.findByIdAndDelete(req.params.businessid);
+    const result = await Business.findOneAndDelete({ id: parseInt(req.params.id) });
     if (!result) {
       res.status(404).json({ error: "Business not found" });
     } else {

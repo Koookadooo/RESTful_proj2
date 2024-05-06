@@ -3,26 +3,69 @@ const Photo = require('../models/photos.js');
 const Business = require('../models/businesses.js');
 
 /*
+* Route to return a list of photos.
+*/
+router.get('/', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const numPerPage = 10;
+    const totalDocuments = await Photo.countDocuments();
+    const lastPage = Math.ceil(totalDocuments / numPerPage);
+    const photos = await Photo.find({})
+                              .skip((page - 1) * numPerPage)
+                              .limit(numPerPage);
+
+    const links = {};
+    if (page < lastPage) {
+      links.nextPage = `/photos?page=${page + 1}`;
+      links.lastPage = `/photos?page=${lastPage}`;
+    }
+    if (page > 1) {
+      links.prevPage = `/photos?page=${page - 1}`;
+      links.firstPage = '/photos?page=1';
+    }
+
+    res.status(200).json({
+      photos,
+      pageNumber: page,
+      totalPages: lastPage,
+      pageSize: numPerPage,
+      totalCount: totalDocuments,
+      links
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/*
  * Route to create a new photo.
  */
 router.post('/', async (req, res) => {
   try {
-    // Validate existence of the business before saving the photo
-    const businessExists = await Business.findById(req.body.businessid);
+    const businessExists = await Business.findOne({ id: parseInt(req.body.businessid) });
     if (!businessExists) {
+      console.log(`No business found with ID ${req.body.businessid}`);
       return res.status(404).json({ error: "Business not found" });
     }
 
-    const newPhoto = new Photo(req.body);
+    const lastPhoto = await Photo.findOne().sort({ id: -1 });
+    const newId = lastPhoto ? lastPhoto.id + 1 : 1;
+
+    const newPhoto = new Photo({
+      ...req.body,
+      id: newId
+    });
     await newPhoto.save();
     res.status(201).json({
-      id: newPhoto._id,
+      id: newPhoto.id,
       links: {
-        photo: `/photos/${newPhoto._id}`,
+        photo: `/photos/${newPhoto.id}`,
         business: `/businesses/${newPhoto.businessid}`
       }
     });
   } catch (error) {
+    console.error('Failed to save new photo:', error);
     res.status(400).json({ error: error.message });
   }
 });
@@ -30,9 +73,9 @@ router.post('/', async (req, res) => {
 /*
  * Route to fetch info about a specific photo.
  */
-router.get('/:photoID', async (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
-    const photo = await Photo.findById(req.params.photoID);
+    const photo = await Photo.findOne({ id: parseInt(req.params.id) });  // Use findOne with numeric id
     if (!photo) {
       return res.status(404).send("Photo not found");
     }
@@ -45,15 +88,16 @@ router.get('/:photoID', async (req, res) => {
 /*
  * Route to update a photo.
  */
-router.put('/:photoID', async (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
-    const updatedPhoto = await Photo.findByIdAndUpdate(req.params.photoID, req.body, { new: true });
+    const updatedPhoto = await Photo.findOneAndUpdate({ id: parseInt(req.params.id) }, req.body, { new: true });
     if (!updatedPhoto) {
       return res.status(404).json({ error: "Photo not found" });
     }
     res.status(200).json({
+      id: updatedPhoto.id,  // Use numeric id for updated photo
       links: {
-        photo: `/photos/${updatedPhoto._id}`,
+        photo: `/photos/${updatedPhoto.id}`,
         business: `/businesses/${updatedPhoto.businessid}`
       }
     });
@@ -65,9 +109,9 @@ router.put('/:photoID', async (req, res) => {
 /*
  * Route to delete a photo.
  */
-router.delete('/:photoID', async (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
-    const result = await Photo.findByIdAndDelete(req.params.photoID);
+    const result = await Photo.findOneAndDelete({ id: parseInt(req.params.id) });
     if (!result) {
       return res.status(404).json({ error: "Photo not found" });
     }

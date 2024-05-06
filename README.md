@@ -198,4 +198,3 @@ This assignment is worth 100 total points, broken down as follows:
 
 As described above, you can also earn up to 10 points of extra credit
 for using Mongoose in conjunction with MongoDB.
-# RESTful_proj2
